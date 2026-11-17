@@ -59,8 +59,11 @@ resolve() {
 	dnssd://*)
 		local service=${1#dnssd://}
 		service=${service%%._*}
+		# the name stays avahi-escaped ("Brother\032DCP-1610W\032series"), exactly as
+		# avahi-browse prints it. Pass it via ENVIRON: awk -v would turn "\032"
+		# into a control character and nothing would ever match
 		timeout 6 avahi-browse -rtp _pdl-datastream._tcp 2>/dev/null |
-			awk -F';' -v name="${service}" '$1 == "=" && $3 == "IPv4" && $4 == name { print $8 "\t" $9; exit }'
+			SERVICE="${service}" awk -F';' '$1 == "=" && $3 == "IPv4" && $4 == ENVIRON["SERVICE"] { print $8 "\t" $9; exit }'
 		;;
 	socket://*)
 		local hostport=${1#socket://}
