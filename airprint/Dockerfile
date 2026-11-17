@@ -2,7 +2,14 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
+# Many vendor drivers (Brother's especially) ship only 32-bit x86 binaries.
+# On amd64, enable the i386 architecture so those .debs install and run.
+# No vendor driver is bundled; this only adds the 32-bit C library.
+RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then dpkg --add-architecture i386; fi \
+ && apt-get update \
+ && if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+      apt-get install -y --no-install-recommends libc6:i386; \
+    fi \
  && apt-get install -y --no-install-recommends \
       avahi-daemon \
       avahi-utils \
@@ -13,6 +20,7 @@ RUN apt-get update \
       cups-filters \
       curl \
       dbus \
+      ghostscript \
       jq \
       python3 \
       snmp \
@@ -35,6 +43,7 @@ COPY cupsd.conf /etc/cups/cupsd.conf
 COPY cupsd.conf /usr/share/airprint/cupsd.conf
 COPY avahi-daemon.conf /etc/avahi/avahi-daemon.conf
 COPY printer.png /usr/share/airprint/printer.png
+COPY drivers/ /usr/share/airprint/drivers/
 COPY run.sh /run.sh
 COPY monitor.sh /monitor.sh
 COPY drivers.sh /drivers.sh

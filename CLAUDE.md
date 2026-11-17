@@ -86,7 +86,7 @@ Write for **a Home Assistant user who wants their printer on AirPrint** — not 
 
 - **Home Assistant's conventions win.** Sentence-case entity names, its device classes and their fixed state text, its selectors. If a request conflicts with one, say so before deviating.
 - **The data model mirrors the UI.** One key per field the user sees.
-- **Proprietary drivers are never bundled.** They are downloaded at runtime from a URL on the printer, or dropped into `/share/airprint/drivers`. A published image ships only the free driver set — that is what makes it publishable at all.
+- **Proprietary drivers are not bundled, with one deliberate exception in this fork:** the Brother DCP-1610W driver lives in `airprint/drivers/brother/` and is installed from `/usr/share/airprint/drivers` on every start, so the printer works with no setup. Any other vendor driver is downloaded at runtime from a URL on the printer, or dropped into `/share/airprint/drivers`.
 
 ## Traps worth knowing
 
@@ -97,6 +97,8 @@ Each of these cost real debugging time at least once.
 - **Printer icons are served from CUPS' `CacheDir`** (`/var/cache/cups/images/<queue>.png`), not doc-root. The directory must exist or the advertised icon URL always 404s.
 - **Installing any cups package starts Debian's own cupsd** on port 631; ours then cannot bind and `lpadmin` talks to the wrong daemon (returns `Unauthorized`). `pkill -x cupsd` after driver install, before starting ours. This looks exactly like a permissions bug and is not one.
 - **`ping` never works inside the container** (no raw-socket capability). Probe with SNMP or TCP.
+- **Vendor maintainer scripts make their own queue.** Brother's postinst runs `lpinfo -v` (the 9100-opening snmp backend) and `lpadmin -p <model>`. `drivers.sh` puts no-op `lpinfo`/`lpadmin` shims first on `PATH` while a driver installs; keep them.
+- **Brother ships only i386 binaries** (`rawtobr3`, `brcupsconfig4`) and its PPDs carry no `1284DeviceID`, so brlaser wins a device-id match. The image enables i386 + `libc6:i386` on amd64, and `discover.sh` prefers any PPD from a user-supplied driver (`/tmp/airprint-vendor-ppds`), falling back to a name match on `*ModelName`/`*NickName`/`*Product`.
 - **The add-on must keep running with zero printers.** It used to `exit 1`, which killed the status API and mDNS advert, so a fresh install was undiscoverable and you could never add the first printer.
 - **Home Assistant's own IPP integration will discover our CUPS queue** and offer a redundant card. Unavoidable, because we must advertise `_ipp._tcp` for AirPrint. Tell the user to Ignore it.
 - **Renaming a printer leaves ghost Bonjour records** cached in resolvers for up to an hour. Verify what is really published by asking cupsd (`ipptool ... | grep printer-dns-sd-name`), not by browsing mDNS.

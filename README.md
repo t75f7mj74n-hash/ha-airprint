@@ -27,10 +27,10 @@ Two pieces: an **add-on** (the print server) and an **integration** (the setup s
 **1. Add-on** — Settings → Add-ons → Add-on Store → ⋮ → **Repositories** → add:
 
 ```
-https://github.com/aaronfagan/ha-airprint
+https://github.com/t75f7mj74n-hash/ha-airprint
 ```
 
-Install **AirPrint** and start it. A prebuilt image is pulled — `amd64` and `aarch64`, nothing is compiled on your machine.
+Install **AirPrint** and start it. The add-on is built on your machine the first time, which takes a few minutes.
 
 **2. Integration** — add this repository to [HACS](https://hacs.xyz) as an Integration, install **AirPrint**, then restart Home Assistant. (Or copy `custom_components/airprint` into your `config` folder and restart.)
 
@@ -83,7 +83,33 @@ Any URL works, so **host the driver yourself** if you can. Vendor links are usua
 
 **Or drop the file in.** Put a `.deb`, `.ppd` or `.tar.gz` into `/share/airprint/drivers` (Home Assistant's *share* folder, reachable with the Samba or File Editor add-on). It is installed on start.
 
+A driver you supply always wins over the bundled free set, so adding one also replaces a free driver that was matched but prints badly.
+
+32-bit (`i386`) vendor packages install on `amd64` machines. On a Raspberry Pi or other ARM box they cannot run, and the log says so.
+
 If nothing matches your printer, the add-on says so in its log and skips it, rather than setting up a queue that cannot print.
+
+<details>
+<summary><b>Example: a Brother laser (DCP-1610W)</b></summary>
+
+<br>
+
+**The DCP-1610W driver is built in** (`amd64` only), so there is nothing to do: install the add-on, add the printer, print.
+
+For another Brother model: Brother's Linux driver comes as two 32-bit packages, an **LPR driver** and a **CUPS wrapper**, and both are needed. Get them from Brother's support page for your model (Downloads → Linux → *Linux (deb)*).
+
+1. Put **both** `.deb` files into `/share/airprint/drivers`. (The **Driver file URL** field takes one file, so for a link pack both into one `.tar.gz` instead.)
+2. Restart the add-on. It logs what it installed and the driver it matched:
+
+```
+[airprint] installing dcp1610wcupswrapper-3.0.1-1.i386.deb
+[airprint] installing dcp1610wlpr-3.0.1-1.i386.deb
+[airprint] Brother DCP-1610W series: driver brother-DCP1610W-cups-en.ppd
+```
+
+Brother's installer normally creates a print queue of its own. Here that step is skipped; the add-on makes the queue.
+
+</details>
 
 <details>
 <summary><b>Example: a host-based Canon laser</b></summary>
@@ -145,4 +171,4 @@ Desktop clients *do* fetch the icon image, and the add-on serves one automatical
 
 ## Licence
 
-[MIT](LICENSE). Vendor drivers are downloaded from the vendor and covered by their own licences; none are redistributed here.
+[MIT](LICENSE). Vendor drivers are covered by their own licences. The Brother DCP-1610W driver in `airprint/drivers/brother/` is Brother's, © Brother Industries, Ltd., and is included unmodified.
