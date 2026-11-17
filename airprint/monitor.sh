@@ -34,6 +34,25 @@ alive() {
 	[ -n "$(snmp "$1" 1.3.6.1.2.1.1.3.0)" ]
 }
 
+# Brother lasers report toner over the Printer MIB only as -3 ("some
+# remaining") with capacity -2 ("unknown"). The real figure is in Brother's
+# private maintenance blob: 7-byte records (code, 2 bytes, 4-byte value),
+# where code 0x6F is black toner remaining in hundredths of a percent.
+brother_toner() {
+	local hex rec i
+	hex=$(snmpget -v1 -c public -t 2 -r 0 -Oqvx "$1" 1.3.6.1.4.1.2435.2.3.9.4.2.1.5.5.8.0 2>/dev/null | tr -cd '0-9A-Fa-f')
+	for ((i = 0; i + 14 <= ${#hex}; i += 14)); do
+		rec=${hex:i:14}
+		case "${rec:0:2}" in
+		6F | 6f)
+			echo $((16#${rec:6:8} / 100))
+			return
+			;;
+		FF | ff) return ;;
+		esac
+	done
+}
+
 error_reasons() {
 	local hex
 	hex=$(snmpget -v1 -c public -t 2 -r 0 -Oqvx "$1" 1.3.6.1.2.1.25.3.5.1.2.1 2>/dev/null | tr -cd '0-9A-Fa-f')
@@ -139,8 +158,12 @@ while true; do
 			CAPACITY=$(snmp "${HOST}" 1.3.6.1.2.1.43.11.1.1.8.1.1)
 			COUNT=$(snmp "${HOST}" 1.3.6.1.2.1.43.10.2.1.4.1.1)
 
-			if [ -n "${LEVEL}" ] && [ -n "${CAPACITY}" ] && [ "${CAPACITY}" -gt 0 ] 2>/dev/null; then
+			if [ -n "${LEVEL}" ] && [ -n "${CAPACITY}" ] && [ "${LEVEL}" -ge 0 ] 2>/dev/null && [ "${CAPACITY}" -gt 0 ] 2>/dev/null; then
 				TONER=$((LEVEL * 100 / CAPACITY))
+			elif [ -n "${LEVEL}" ] && [ "${LEVEL}" -lt 0 ] 2>/dev/null; then
+				# negative = "unknown"/"some remaining"; ask Brother's private MIB
+				BROTHER=$(brother_toner "${HOST}")
+				[ -n "${BROTHER}" ] && TONER=${BROTHER}
 			fi
 			[ -n "${COUNT}" ] && [ "${COUNT}" -ge 0 ] 2>/dev/null && PAGES=${COUNT}
 
