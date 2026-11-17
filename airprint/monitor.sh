@@ -98,7 +98,20 @@ while true; do
 
 		printf '%s\t%s\t%s\t%s\t%s\n' "${QUEUE}" "${DEVICE}" "${LABEL}" "${LOCATION}" "${DRIVER}" >> "${QUEUES}.next"
 
-		IFS=$'\t' read -r HOST _ < <(resolve "${DEVICE}")
+		# the discovery scan this cycle already resolved the printer's address;
+		# only fall back to a second avahi lookup when it did not
+		HOST=$(printf '%s' "${FOUND}" | jq -r --arg d "${DEVICE}" '.[] | select(.device == $d) | .address // ""' | head -1)
+		[ -n "${HOST}" ] || IFS=$'\t' read -r HOST _ < <(resolve "${DEVICE}")
+
+		if [ -z "${HOST:-}" ] && [ "${DEVICE#dnssd://}" != "${DEVICE}" ]; then
+			if ! grep -qx "unresolved_${QUEUE}" "${NOTIFIED}"; then
+				echo "unresolved_${QUEUE}" >> "${NOTIFIED}"
+				echo "[airprint] ${LABEL}: could not find the address of ${DEVICE}. avahi-browse sees:"
+				timeout 6 avahi-browse -rtp _pdl-datastream._tcp 2>/dev/null | cut -d';' -f1-9 | cat -v | sed 's/^/[airprint]   /'
+			fi
+		elif [ -n "${HOST:-}" ]; then
+			sed -i "/^unresolved_${QUEUE}$/d" "${NOTIFIED}"
+		fi
 
 		if [ -z "${HOST:-}" ]; then
 			ONLINE=false
@@ -196,10 +209,12 @@ while true; do
 			"new_${ID}"
 	done < <(printf '%s' "${FOUND}" | jq -c '.[]')
 
-	SLUG=$(curl -sS -m 10 -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/addons/self/info 2>/dev/null | jq -r '.data.slug // ""')
+	SELF=$(curl -sS -m 10 -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/addons/self/info 2>/dev/null)
+	SLUG=$(printf '%s' "${SELF}" | jq -r '.data.slug // ""' 2>/dev/null)
+	VERSION=$(printf '%s' "${SELF}" | jq -r '.data.version // ""' 2>/dev/null)
 
-	jq -nc --argjson printers "${PRINTERS}" --argjson discovered "${DISCOVERED}" --arg slug "${SLUG}" \
-		'{printers:$printers, discovered:$discovered, slug:$slug}' > "${STATUS}.tmp"
+	jq -nc --argjson printers "${PRINTERS}" --argjson discovered "${DISCOVERED}" --arg slug "${SLUG}" --arg version "${VERSION}" \
+		'{printers:$printers, discovered:$discovered, slug:$slug, version:$version}' > "${STATUS}.tmp"
 	mv "${STATUS}.tmp" "${STATUS}"
 
 	sleep "${INTERVAL}"
