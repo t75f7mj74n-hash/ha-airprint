@@ -18,6 +18,17 @@ else
 	echo 'SystemGroup root lpadmin' >> /etc/cups/cups-files.conf
 fi
 
+# AirPrint clients connect to the host name in our Bonjour SRV records, so it
+# must be one that resolves: the Home Assistant host's own name, which HA OS
+# already answers for on mDNS. Avahi only borrows the name for SRV targets
+# (publish-addresses=no), so it never competes with HA OS for the A record.
+HOST_NAME=$(curl -sS -m 10 -H "Authorization: Bearer ${SUPERVISOR_TOKEN:-}" http://supervisor/host/info 2>/dev/null | jq -r '.data.hostname // ""' 2>/dev/null)
+[ -n "${HOST_NAME}" ] || HOST_NAME=$(hostname 2>/dev/null)
+HOST_NAME=${HOST_NAME%%.*}
+[ -n "${HOST_NAME}" ] || HOST_NAME=homeassistant
+sed -i "s/^host-name=.*/host-name=${HOST_NAME}/" /etc/avahi/avahi-daemon.conf
+echo "[airprint] advertising printers on ${HOST_NAME}.local"
+
 mkdir -p /run/dbus
 rm -f /run/dbus/pid
 dbus-daemon --system --fork
